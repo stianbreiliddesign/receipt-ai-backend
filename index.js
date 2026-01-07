@@ -14,6 +14,9 @@ app.get("/", (req, res) => {
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+app.get("/", (req, res) => {
+  res.send("OK");
+});
 
 app.post("/analyze", async (req, res) => {
   const { text } = req.body;
