@@ -1,0 +1,14 @@
+{
+  "name": "receipt-ai-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "cors": "^2.8.5",
+    "openai": "^4.0.0"
+  }
+}
+
