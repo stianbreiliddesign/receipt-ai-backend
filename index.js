@@ -44,7 +44,10 @@ ${text}
   res.json(JSON.parse(completion.choices[0].message.content));
 });
 
-app.listen(3000, () => {
-  console.log("Server kjører på port 3000");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server kjører på port ${PORT}`);
 });
+
 
