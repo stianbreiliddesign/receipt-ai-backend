@@ -10,49 +10,57 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 🔍 Health check (VIKTIG)
+// 🔍 Health check (viktig!)
 app.get("/", (req, res) => {
-  res.json({ status: "OK" });
+  res.send("OK");
 });
 
 app.post("/analyze", async (req, res) => {
   try {
     const { text } = req.body;
 
-    if (!text || text.trim().length < 20) {
-      return res.json({ error: "For lite tekst fra kvittering" });
+    if (!text || text.length < 10) {
+      return res.status(400).json({ error: "Ingen tekst mottatt" });
     }
 
     const prompt = `
-Du er en norsk kvitterings-analytiker.
+Du er en kvitterings-analytiker.
 
-OCR-tekst fra dagligvarekvittering:
+Dette er OCR-tekst fra en norsk dagligvarekvittering.
+
+Oppgave:
+1. Finn alle produkter
+2. Knytt riktig pris til hvert produkt hvis mulig
+3. Kategoriser hvert produkt i ÉN av:
+   - snus
+   - alkohol
+   - snacks_godteri
+   - frossen_pizza
+   - annet
+
+Returner KUN gyldig JSON på dette formatet:
+
+{
+  "items": [
+    {
+      "name": "COOP NACHOS CHIPS",
+      "price": 16.50,
+      "category": "snacks_godteri"
+    }
+  ],
+  "totals": {
+    "snacks_godteri": 16.50,
+    "alkohol": 0,
+    "snus": 0,
+    "frossen_pizza": 0,
+    "annet": 60.50
+  }
+}
+
+OCR-tekst:
 """
 ${text}
 """
-
-Finn varer og priser.
-Kategoriser i:
-- snus
-- alkohol
-- snacks_godteri
-- frossen_pizza
-- annet
-
-Returner KUN gyldig JSON i dette formatet:
-
-{
-  "varer": [
-    { "navn": "...", "pris": 0, "kategori": "..." }
-  ],
-  "summer": {
-    "snus": 0,
-    "alkohol": 0,
-    "snacks_godteri": 0,
-    "frossen_pizza": 0,
-    "annet": 0
-  }
-}
 `;
 
     const completion = await openai.chat.completions.create({
@@ -62,29 +70,19 @@ Returner KUN gyldig JSON i dette formatet:
     });
 
     const raw = completion.choices[0].message.content;
+    console.log("AI RAW RESPONSE:\n", raw);
 
-    // 🔒 Trygg parsing
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      console.error("JSON parse feilet:", raw);
-      return res.json({
-        error: "AI returnerte ugyldig format",
-        raw: raw,
-      });
-    }
-
+    const parsed = JSON.parse(raw);
     res.json(parsed);
   } catch (err) {
-    console.error(err);
+    console.error("ANALYZE ERROR:", err.message);
     res.status(500).json({
       error: "Klarte ikke analysere kvitteringen",
     });
   }
 });
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server kjører på port", PORT);
+  console.log(`Server kjører på port ${PORT}`);
 });
