@@ -1,8 +1,12 @@
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import OpenAI from "openai";
+import fs from "fs";
 
 const app = express();
+const upload = multer({ dest: "uploads/" });
+
 app.use(cors());
 app.use(express.json());
 
@@ -10,79 +14,78 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 🔍 Health check (viktig!)
 app.get("/", (req, res) => {
   res.send("OK");
 });
 
-app.post("/analyze", async (req, res) => {
+app.post("/analyze", upload.single("image"), async (req, res) => {
   try {
-    const { text } = req.body;
-
-    if (!text || text.length < 10) {
-      return res.status(400).json({ error: "Ingen tekst mottatt" });
+    if (!req.file) {
+      return res.status(400).json({ error: "Ingen bilde mottatt" });
     }
 
-    const prompt = `
-Du er en kvitterings-analytiker.
+    const imageBuffer = fs.readFileSync(req.file.path);
 
-Dette er OCR-tekst fra en norsk dagligvarekvittering.
+    const response = await openai.responses.create({
+      model: "gpt-4o-mini",
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `
+Dette er et bilde av en norsk dagligvarekvittering.
 
 Oppgave:
-1. Finn alle produkter
-2. Knytt riktig pris til hvert produkt hvis mulig
-3. Kategoriser hvert produkt i ÉN av:
-   - snus
-   - alkohol
-   - snacks_godteri
-   - frossen_pizza
-   - annet
+- Finn varer og priser
+- Kategoriser hver vare i:
+  - snus
+  - alkohol
+  - snacks_godteri
+  - frossen_pizza
+  - annet
 
-Returner KUN gyldig JSON på dette formatet:
+Svar KUN med gyldig JSON i dette formatet:
 
 {
-  "items": [
+  "butikk": string,
+  "dato": string,
+  "varer": [
     {
-      "name": "COOP NACHOS CHIPS",
-      "price": 16.50,
-      "category": "snacks_godteri"
+      "navn": string,
+      "pris": number,
+      "kategori": string
     }
   ],
-  "totals": {
-    "snacks_godteri": 16.50,
-    "alkohol": 0,
-    "snus": 0,
-    "frossen_pizza": 0,
-    "annet": 60.50
-  }
+  "total": number
 }
-
-OCR-tekst:
-"""
-${text}
-"""
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
-      messages: [{ role: "user", content: prompt }],
+`
+            },
+            {
+              type: "input_image",
+              image_base64: imageBuffer.toString("base64"),
+            }
+          ],
+        }
+      ],
     });
 
-    const raw = completion.choices[0].message.content;
-    console.log("AI RAW RESPONSE:\n", raw);
+    // Rydd opp midlertidig fil
+    fs.unlinkSync(req.file.path);
 
-    const parsed = JSON.parse(raw);
-    res.json(parsed);
+    const text = response.output_text;
+
+    res.json(JSON.parse(text));
   } catch (err) {
-    console.error("ANALYZE ERROR:", err.message);
+    console.error(err);
     res.status(500).json({
       error: "Klarte ikke analysere kvitteringen",
     });
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server kjører på port ${PORT}`);
 });
