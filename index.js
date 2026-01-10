@@ -4,7 +4,7 @@ import multer from "multer";
 import OpenAI from "openai";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB
 
 app.use(cors());
 
@@ -12,7 +12,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Health check (VIKTIG for Render)
+// Health check (viktig for Render)
 app.get("/", (req, res) => {
   res.send("OK");
 });
@@ -23,61 +23,38 @@ app.post("/analyze-image", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "Ingen bilde mottatt" });
     }
 
-    const base64Image = req.file.buffer.toString("base64");
+    const imageBase64 = req.file.buffer.toString("base64");
 
     const response = await openai.responses.create({
-      model: "gpt-4.1",
+      model: "gpt-4.1-mini",
       input: [
         {
           role: "user",
           content: [
-            {
-              type: "input_text",
-              text: `
-Dette er et bilde av en norsk dagligvarekvittering.
-
-Oppgaver:
-1. Finn alle varer med pris
-2. Kategoriser i:
-   - snus
-   - alkohol
-   - snacks_godteri
-   - frossen_pizza
-   - annet
-3. Summer total per kategori
-
-Returner KUN gyldig JSON i dette formatet:
-{
-  "items": [
-    { "name": "...", "price": 0, "category": "..." }
-  ],
-  "totals": {
-    "snus": 0,
-    "alkohol": 0,
-    "snacks_godteri": 0,
-    "frossen_pizza": 0,
-    "annet": 0
-  }
-}
-`
-            },
+            { type: "input_text", text: "Dette er et bilde av en norsk dagligvarekvittering. Finn varer, priser og kategoriser i: snus, alkohol, snacks/godteri, frossen pizza, annet. Returner KUN gyldig JSON." },
             {
               type: "input_image",
-              image_url: `data:image/jpeg;base64,${base64Image}`
-            }
-          ]
-        }
-      ]
+              image_base64: imageBase64,
+            },
+          ],
+        },
+      ],
     });
 
-    res.json(response.output_parsed);
-  } catch (error) {
-    console.error("ANALYZE ERROR:", error);
-    res.status(500).json({ error: "Klarte ikke analysere kvitteringen" });
+    const outputText =
+      response.output_text ||
+      response.output?.[0]?.content?.[0]?.text;
+
+    res.json(JSON.parse(outputText));
+  } catch (err) {
+    console.error("ANALYSE-FEIL:", err);
+    res.status(500).json({
+      error: "Klarte ikke analysere kvitteringen",
+    });
   }
 });
 
-const port = process.env.PORT || 10000;
-app.listen(port, () => {
-  console.log("Server kjører på port", port);
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`Server kjører på port ${PORT}`);
 });
